@@ -3,8 +3,8 @@
 ## Project Overview
 
 `insta360-print-anything-mobile` is the Android-first Flutter front end for
-[`insta360-print-anything`](https://github.com/kkazakov/insta360-print-anything): it lists the phone's
-recent photos, lets the user pick one, and copies it onto a USB-connected
+[`insta360-print-anything`](https://github.com/kkazakov/insta360-print-anything):
+it lists the phone's recent photos, lets the user pick one, and copies it onto a USB-connected
 Insta360 camera as a file the camera itself lists.
 
 Both stages are implemented and released as **1.0.0**: the gallery/permissions/
@@ -23,7 +23,7 @@ package `insta360_print_anything_mobile`, application id
 ```bash
 flutter pub get
 flutter analyze                      # must stay at zero issues
-flutter test                         # 124 Dart unit + widget tests
+flutter test                         # 124 with .dev-samples; 26 skip on a clean clone
 JAVA_HOME=/usr/lib/jvm/java-21-openjdk flutter build apk --debug
 JAVA_HOME=/usr/lib/jvm/java-21-openjdk flutter build apk --release
 JAVA_HOME=/usr/lib/jvm/java-21-openjdk flutter build appbundle --release

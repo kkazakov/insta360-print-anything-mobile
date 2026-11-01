@@ -317,7 +317,8 @@ cd android && JAVA_HOME=/usr/lib/jvm/java-21-openjdk \
   ./gradlew :app:testDebugUnitTest --tests 'com.wasp.insta360_print_anything_mobile.camera.*'
 ```
 
-- **124 Dart tests**: gallery state machine, USB payload/classification, camera
+- **124 Dart tests** in a full development checkout (26 of the sample-backed
+  tests skip cleanly when `.dev-samples/` is absent): gallery state machine, USB payload/classification, camera
   picker, SAF repository rules, permission and review widgets, layout reflow,
   the whole copy format core (69 tests, with byte-identical cross-checks
   against the Python tool), and the copy engine end-to-end on real sample bytes
