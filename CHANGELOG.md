@@ -4,7 +4,7 @@ All notable changes to Insta360 Print (mobile). The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [semantic versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.1.0] — 2026-11-01
 
 ### Added
 
@@ -12,6 +12,14 @@ All notable changes to Insta360 Print (mobile). The format follows
   Reset, and Apply. The selected window is sent to the native decoder, so the
   camera receives exactly the part shown in the frame. The default remains the
   centered crop.
+- Native decoder accepts the normalized crop window and decodes at the crop's
+  scale, with a 20 MP ARGB cap to keep memory bounded.
+- Curated sunset-only app screenshots in `docs/screenshots/` and a README
+  screenshots section.
+
+### Changed
+
+- README status block removed; iOS is noted as available on demand.
 
 ## [1.0.0] — 2026-11-01
 

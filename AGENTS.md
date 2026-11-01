@@ -7,12 +7,12 @@
 it lists the phone's recent photos, lets the user pick one, and copies it onto a USB-connected
 Insta360 camera as a file the camera itself lists.
 
-Both stages are implemented and released as **1.0.0**: the gallery/permissions/
-USB discovery UI (stage 1) and the camera-original rebuild + SAF write + index
-update (stage 2). The interactive crop editor is post-1.0.0 work in this
-checkout, pending the next release. The whole pipeline was run against the real GO Ultra on
-2026-11-01, the Python analyzer reports 8/8 fingerprints, and the author
-confirmed the camera lists and displays the copied photo. Repository:
+Both stages are implemented and released as **1.1.0**: the gallery/permissions/
+USB discovery UI (stage 1), the camera-original rebuild + SAF write + index
+update (stage 2), and the interactive 4:3 crop editor. The whole pipeline was
+run against the real GO Ultra on 2026-11-01, the Python analyzer reports 8/8
+fingerprints, and the author confirmed the camera lists and displays the copied
+photo. Repository:
 <https://github.com/kkazakov/insta360-print-anything-mobile>.
 
 Canary: this project is `insta360-print-anything-mobile` (hyphens; Flutter
@@ -148,10 +148,10 @@ These are the things that make the file accepted as a camera original:
   then tag `vX.Y.Z` and attach the signed APK/AAB plus `SHA256SUMS` to the GitHub
   release. `versionCode` must increase for every public release.
 - Release signing uses `android/key.properties` (gitignored) pointing at a
-  keystore outside the repo. Never commit either. The official 1.0.0 certificate
-  is `CN=Krasimir Kazakov` with SHA-256
+  keystore outside the repo. Never commit either. The official release
+  certificate is `CN=Krasimir Kazakov` with SHA-256
   `D8:45:6B:04:0A:64:06:31:61:58:F2:00:1A:33:BA:91:AA:66:BF:64:7D:87:AA:E7:60:B1:3F:4D:F2:B0:96:54`;
-  future releases must keep the same key.
+  1.0.0 and 1.1.0 use it, and future releases must keep the same key.
 - Launcher icons are generated, not hand-edited: change
   `tool/icon/app_icon.svg` and run `python3 tool/icon/generate_icons.py`
   (Pillow + CairoSVG) to regenerate the mipmaps, round icons, adaptive

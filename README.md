@@ -13,7 +13,7 @@ Android today; **iOS can be implemented on demand.**
 
 ## Download
 
-Grab `insta360-print-1.0.0.apk` from the
+Grab `insta360-print-1.1.0.apk` from the
 [latest release](https://github.com/kkazakov/insta360-print-anything-mobile/releases/latest).
 The APK is signed for direct installation; the app is not on Google Play.
 
@@ -25,7 +25,7 @@ The APK is signed for direct installation; the app is not on Google Play.
 - Grant photo access on first launch. On the review screen, grant the camera
   drive once (named **disk** on the tested GO Ultra); the grant is remembered per
   camera.
-- `insta360-print-1.0.0.aab` is attached for Google Play/internal distribution.
+- `insta360-print-1.1.0.aab` is attached for Google Play/internal distribution.
 
 ## Screenshots
 
