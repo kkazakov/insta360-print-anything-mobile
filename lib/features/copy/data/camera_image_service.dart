@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 
 import '../domain/camera_image_pipeline.dart';
+import '../domain/crop_window.dart';
 
 /// [CameraImagePipeline] over `CameraImageChannel.kt`.
 class CameraImageService implements CameraImagePipeline {
@@ -25,6 +26,7 @@ class CameraImageService implements CameraImagePipeline {
     required List<int> lumaZigzag,
     required List<int> chromaZigzag,
     required CopyFit fit,
+    CropWindow? crop,
   }) async {
     try {
       final raw = await _channel.invokeMethod<Map<Object?, Object?>>(
@@ -40,6 +42,10 @@ class CameraImageService implements CameraImagePipeline {
           'lumaZigzag': lumaZigzag,
           'chromaZigzag': chromaZigzag,
           'fit': fit.nativeValue,
+          'cropLeft': crop?.left,
+          'cropTop': crop?.top,
+          'cropWidth': crop?.width,
+          'cropHeight': crop?.height,
         },
       );
       if (raw == null) {

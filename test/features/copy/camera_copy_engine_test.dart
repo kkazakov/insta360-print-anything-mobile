@@ -7,6 +7,7 @@ import 'package:insta360_print_anything_mobile/features/copy/data/camera_copy_en
 import 'package:insta360_print_anything_mobile/features/copy/domain/camera_image_pipeline.dart';
 import 'package:insta360_print_anything_mobile/features/copy/domain/copy_engine.dart';
 import 'package:insta360_print_anything_mobile/features/copy/domain/copy_request.dart';
+import 'package:insta360_print_anything_mobile/features/copy/domain/crop_window.dart';
 import 'package:insta360_print_anything_mobile/features/copy/format/exif.dart';
 import 'package:insta360_print_anything_mobile/features/copy/format/jpeg.dart';
 import 'package:insta360_print_anything_mobile/features/copy/format/meta.dart';
@@ -32,6 +33,7 @@ class _FakeImagePipeline implements CameraImagePipeline {
   final int height;
 
   CopyFit? lastFit;
+  CropWindow? lastCrop;
 
   @override
   Future<PreparedCameraImages> prepare({
@@ -45,8 +47,10 @@ class _FakeImagePipeline implements CameraImagePipeline {
     required List<int> lumaZigzag,
     required List<int> chromaZigzag,
     required CopyFit fit,
+    CropWindow? crop,
   }) async {
     lastFit = fit;
+    lastCrop = crop;
     return PreparedCameraImages(
       mainJpeg: mainJpeg,
       previewJpeg: previewJpeg,
@@ -130,12 +134,13 @@ void main() {
     );
   });
 
-  CopyRequest requestFor({CopyFit fit = CopyFit.crop}) {
+  CopyRequest requestFor({CopyFit fit = CopyFit.crop, CropWindow? crop}) {
     return CopyRequest(
       photo: makePhotos(1).first,
       camera: makeCamera(),
       storage: storage,
       fit: fit,
+      crop: crop,
     );
   }
 
@@ -215,6 +220,16 @@ void main() {
 
     expect(result.success, isTrue, reason: result.message);
     expect(pipeline.lastFit, CopyFit.pad);
+    expect(pipeline.lastCrop, isNull);
+  });
+
+  test('passes a custom crop through to the native pipeline', () async {
+    const crop = CropWindow(left: 0.1, top: 0.2, width: 0.5, height: 0.4);
+    final result = await engine.copy(requestFor(crop: crop));
+
+    expect(result.success, isTrue, reason: result.message);
+    expect(pipeline.lastFit, CopyFit.crop);
+    expect(pipeline.lastCrop, crop);
   });
 
   test('requires storage access', () async {

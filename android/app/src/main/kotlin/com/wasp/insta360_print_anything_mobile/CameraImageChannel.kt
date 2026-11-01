@@ -51,6 +51,10 @@ class CameraImageChannel : MethodChannel.MethodCallHandler {
         val luma = call.argument<List<Int>>("lumaZigzag")
         val chroma = call.argument<List<Int>>("chromaZigzag")
         val fit = call.argument<String>("fit") ?: "crop"
+        val cropLeft = call.argument<Double>("cropLeft")
+        val cropTop = call.argument<Double>("cropTop")
+        val cropWidth = call.argument<Double>("cropWidth")
+        val cropHeight = call.argument<Double>("cropHeight")
 
         if (sourcePath == null ||
             width == null || height == null ||
@@ -75,6 +79,10 @@ class CameraImageChannel : MethodChannel.MethodCallHandler {
                     lumaZigzag = luma.toIntArray(),
                     chromaZigzag = chroma.toIntArray(),
                     fit = fit,
+                    cropLeft = cropLeft,
+                    cropTop = cropTop,
+                    cropWidth = cropWidth,
+                    cropHeight = cropHeight,
                 )
                 val payload = mapOf(
                     "mainJpeg" to prepared.mainJpeg,

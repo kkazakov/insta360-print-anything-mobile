@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import 'crop_window.dart';
+
 /// The three JPEG renditions plus the raw gallery buffer produced natively.
 @immutable
 class PreparedCameraImages {
@@ -47,6 +49,7 @@ abstract interface class CameraImagePipeline {
     required List<int> lumaZigzag,
     required List<int> chromaZigzag,
     required CopyFit fit,
+    CropWindow? crop,
   });
 
   /// Bounds-only decode check for produced JPEG bytes.

@@ -129,6 +129,10 @@ class CameraCopyEngine implements CopyEngine {
     final luma = _naturalToZigzag(template.qtables[0]);
     final chroma = _naturalToZigzag(template.qtables[1]);
 
+    final crop = request.fit == CopyFit.crop ? request.crop : null;
+    if (crop != null && !crop.isValid) {
+      throw const _CopyFailure('The selected crop is outside the photo.');
+    }
     final prepared = await _images.prepare(
       sourcePath: sourcePath,
       width: width,
@@ -140,6 +144,7 @@ class CameraCopyEngine implements CopyEngine {
       lumaZigzag: luma,
       chromaZigzag: chroma,
       fit: request.fit,
+      crop: crop,
     );
     if (prepared.width != width || prepared.height != height) {
       throw _CopyFailure(

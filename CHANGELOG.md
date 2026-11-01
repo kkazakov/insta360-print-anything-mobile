@@ -4,6 +4,15 @@ All notable changes to Insta360 Print (mobile). The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [semantic versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Interactive 4:3 crop editor on the review screen: pinch to zoom, drag to move,
+  Reset, and Apply. The selected window is sent to the native decoder, so the
+  camera receives exactly the part shown in the frame. The default remains the
+  centered crop.
+
 ## [1.0.0] — 2026-11-01
 
 First public release. Android 9+ (minSdk 28).

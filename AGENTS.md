@@ -9,7 +9,8 @@ Insta360 camera as a file the camera itself lists.
 
 Both stages are implemented and released as **1.0.0**: the gallery/permissions/
 USB discovery UI (stage 1) and the camera-original rebuild + SAF write + index
-update (stage 2). The whole pipeline was run against the real GO Ultra on
+update (stage 2). The interactive crop editor is post-1.0.0 work in this
+checkout, pending the next release. The whole pipeline was run against the real GO Ultra on
 2026-11-01, the Python analyzer reports 8/8 fingerprints, and the author
 confirmed the camera lists and displays the copied photo. Repository:
 <https://github.com/kkazakov/insta360-print-anything-mobile>.
@@ -23,7 +24,7 @@ package `insta360_print_anything_mobile`, application id
 ```bash
 flutter pub get
 flutter analyze                      # must stay at zero issues
-flutter test                         # 124 with .dev-samples; 26 skip on a clean clone
+flutter test                         # 135 with .dev-samples; 26 skip on a clean clone
 JAVA_HOME=/usr/lib/jvm/java-21-openjdk flutter build apk --debug
 JAVA_HOME=/usr/lib/jvm/java-21-openjdk flutter build apk --release
 JAVA_HOME=/usr/lib/jvm/java-21-openjdk flutter build appbundle --release
@@ -58,10 +59,12 @@ lib/features/cameras/{domain,data,presentation}     USB + SAF camera access
 lib/features/copy/domain/                           CopyEngine, CopyRequest, pipeline contracts
 lib/features/copy/data/                             CameraCopyEngine, CameraImageService
 lib/features/copy/format/                           jpeg, exif, meta, template (pure Dart)
-lib/features/copy/presentation/                     CopyReviewPage
+lib/features/copy/presentation/                     CopyReviewPage, CropEditorPage
+lib/features/copy/presentation/widgets/             CropPreview
 lib/core/{theme,ui}
 android/.../{MainActivity,UsbCameraChannel,CameraStorageChannel,CameraImageChannel}.kt
 android/.../camera/{CameraJpegEncoder,CameraNv21,CameraImagePipeline}.kt
+lib/features/copy/domain/crop_window.dart            normalized 4:3 crop window
 android/app/src/test/kotlin/.../camera/             encoder + NV21 JVM tests
 test/support/fakes.dart                             fake repos/storage/pipeline
 ```
@@ -69,7 +72,8 @@ test/support/fakes.dart                             fake repos/storage/pipeline
 - `GalleryRepository` (photos, permission, thumbnails, original path) — photo_manager.
 - `CameraRepository` (USB list + per-device permission) — USB channel.
 - `CameraStorageRepository` (SAF grant/list/read/write) — storage channel.
-- `CameraImagePipeline` (decode/fit/encode main+preview+thumb, NV21) — image channel.
+- `CameraImagePipeline` (decode/fit/encode main+preview+thumb, NV21) — image channel;
+  accepts a normalized `CropWindow` for `CopyFit.crop`.
 - `CameraCopyEngine` orchestrates template → build → verify → write → index.
 - `CopyEngine` also exposes optional progress updates (`CopyProgress`).
 - `lib/core/debug/demo_camera.dart` adds a compile-time demo camera
@@ -110,6 +114,10 @@ These are the things that make the file accepted as a camera original:
   exactly the 1151-byte metadata blob from the trailer. The edit index record for
   new files is `12 00` (0-byte blob), like the reference tool — the camera's own
   JPEG records carry a 2-byte blob, but accepts the empty one.
+- A custom crop is a normalized [CropWindow] in oriented source coordinates. The
+  editor returns the exact 4:3 window; the native decoder adjusts a mismatched
+  aspect defensively, decodes at the crop's needed scale, and caps the ARGB
+  working set at 20 MP. Never crop after the encode.
 - The copy date is `max(now, newest camera photo + 1 min)`, second precision.
   File name is `IMG_YYYYMMDD_HHMMSS_NNN.jpg`, exactly 27 chars; `_NNN` is the
   next unused number that day.
@@ -162,7 +170,9 @@ These are the things that make the file accepted as a camera original:
 - Do not swap the trailer chroma order to V,U "because it says NV21". It is U,V.
 - Do not write to the camera without a persisted SAF grant; never fall back to
   arbitrary paths or `MANAGE_EXTERNAL_STORAGE`.
-- Do not commit media: `.dev-samples/`, APKs, `build/`, screenshots.
+- Do not commit personal media. The only images in the repo are the curated,
+  status-bar-cropped app screenshots under `docs/screenshots/` (safe sunset-only
+  set). Keep `.dev-samples/`, APKs, `build/` and any user photos out.
 - Do not write the camera index from a template that was not read from this
   camera body.
 
@@ -192,6 +202,10 @@ These are the things that make the file accepted as a camera original:
   `GalleryAccessException` rather than pretending the library is empty.
 - `AssetEntityImageProvider` must use `isOriginal: false` with a thumbnail size;
   the default decodes the full original.
+- Screenshots: use only a user-prepared gallery screen with safe photos, never
+  scroll past it, and crop the status bar before saving. The current set is
+  `docs/screenshots/overview.jpg` plus the numbered PNGs; regenerate the montage
+  from `01-gallery`, `04-crop-editor`, `07-copy-success`.
 - The device is paired over wireless adb at `192.168.88.10:44045`; it drops when
   the phone sleeps or the camera is unplugged. The normal debug build is
   installed. On 2026-11-01 the GO Ultra was attached, the persisted "disk" grant
@@ -214,9 +228,9 @@ These are the things that make the file accepted as a camera original:
 
 ## Future work
 
-- Portrait/16:9 sources use the smallest 4:3 camera mode and are cropped or
-  letterboxed; matching the source aspect to a 37 MP 16:9 template is the next
-  meaningful improvement.
+- Portrait/16:9 sources use the smallest 4:3 camera mode; the crop editor makes
+  the kept window explicit, but matching the source aspect to a 37 MP 16:9 mode
+  is still future work.
 - Open the folder picker at the USB drive (`EXTRA_INITIAL_URI` is ignored on the
   tested vivo) and remember the grant per physical body rather than per VID:PID.
 - iOS transport; the format/domain layers are platform-independent Dart.

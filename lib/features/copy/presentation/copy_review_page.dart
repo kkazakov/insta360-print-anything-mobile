@@ -6,6 +6,9 @@ import '../../gallery/domain/photo_asset.dart';
 import '../domain/camera_image_pipeline.dart';
 import '../domain/copy_engine.dart';
 import '../domain/copy_request.dart';
+import '../domain/crop_window.dart';
+import 'crop_editor_page.dart';
+import 'widgets/crop_preview.dart';
 
 /// Final confirmation before a photo is written to the camera.
 ///
@@ -37,6 +40,7 @@ class _CopyReviewPageState extends State<CopyReviewPage> {
   bool _isCopying = false;
   String? _copyProgress;
   CopyFit _fit = CopyFit.crop;
+  late CropWindow _crop;
   bool _isLoadingStorage = true;
   bool _isGrantingStorage = false;
   CameraStorage? _storage;
@@ -45,7 +49,24 @@ class _CopyReviewPageState extends State<CopyReviewPage> {
   @override
   void initState() {
     super.initState();
+    _crop = CropWindow.centered(imageAspect: widget.photo.aspectRatio);
     _loadStorage();
+  }
+
+  Future<void> _adjustCrop() async {
+    final imageProvider = widget.preview;
+    if (imageProvider == null) return;
+    final crop = await Navigator.of(context).push<CropWindow>(
+      MaterialPageRoute<CropWindow>(
+        builder: (context) => CropEditorPage(
+          photo: widget.photo,
+          imageProvider: imageProvider,
+          initialCrop: _crop,
+        ),
+      ),
+    );
+    if (crop == null || !mounted) return;
+    setState(() => _crop = crop);
   }
 
   Future<void> _loadStorage() async {
@@ -123,7 +144,13 @@ class _CopyReviewPageState extends State<CopyReviewPage> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
           children: [
-            _Preview(photo: widget.photo, imageProvider: widget.preview),
+            _Preview(
+              photo: widget.photo,
+              imageProvider: widget.preview,
+              fit: _fit,
+              crop: _crop,
+              onAdjust: widget.preview == null ? null : _adjustCrop,
+            ),
             const SizedBox(height: 18),
             if (unavailableReason != null) ...[
               _Notice(
@@ -168,10 +195,24 @@ class _CopyReviewPageState extends State<CopyReviewPage> {
                     setState(() => _fit = selection.first);
                   },
                 ),
-                const SizedBox(height: 6),
+                if (_fit == CopyFit.crop)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      key: const Key('adjust-crop'),
+                      onPressed: widget.preview == null ? null : _adjustCrop,
+                      icon: const Icon(Icons.crop_free_rounded, size: 18),
+                      label: const Text('Adjust crop'),
+                      style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 2),
                 Text(
                   _fit == CopyFit.crop
-                      ? 'Fills the camera frame; edges may be cropped.'
+                      ? 'Fills the camera frame; tap Adjust crop to zoom and '
+                            'choose what stays.'
                       : 'Keeps the whole photo; black bars fill the frame.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -272,6 +313,7 @@ class _CopyReviewPageState extends State<CopyReviewPage> {
           camera: widget.camera,
           storage: _storage,
           fit: _fit,
+          crop: _fit == CopyFit.crop ? _crop : null,
         ),
         onProgress: (progress) {
           if (!mounted) return;
@@ -494,42 +536,119 @@ class _StorageCard extends StatelessWidget {
 }
 
 class _Preview extends StatelessWidget {
-  const _Preview({required this.photo, required this.imageProvider});
+  const _Preview({
+    required this.photo,
+    required this.imageProvider,
+    required this.fit,
+    required this.crop,
+    required this.onAdjust,
+  });
 
   final PhotoAsset photo;
   final ImageProvider? imageProvider;
+  final CopyFit fit;
+  final CropWindow crop;
+  final VoidCallback? onAdjust;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
-      child: Container(
-        height: 300,
-        color: scheme.surfaceContainerHigh,
-        alignment: Alignment.center,
-        child: imageProvider == null
-            ? Icon(
+    return Container(
+      height: 300,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: fit == CopyFit.pad ? Colors.black : scheme.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: imageProvider == null
+          ? Center(
+              child: Icon(
                 Icons.image_outlined,
                 size: 36,
                 color: scheme.onSurfaceVariant.withValues(alpha: 0.5),
-              )
-            : Image(
-                image: imageProvider!,
-                fit: BoxFit.contain,
-                frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-                  if (wasSynchronouslyLoaded) return child;
-                  return AnimatedOpacity(
-                    opacity: frame == null ? 0 : 1,
-                    duration: const Duration(milliseconds: 200),
-                    child: child,
-                  );
-                },
-                errorBuilder: (context, error, stackTrace) => Icon(
-                  Icons.broken_image_outlined,
-                  color: scheme.onSurfaceVariant,
+              ),
+            )
+          : fit == CopyFit.pad
+          ? _ContainedPreview(imageProvider: imageProvider!)
+          : Center(
+              child: AspectRatio(
+                aspectRatio: cameraFrameAspect,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    CropPreview(
+                      imageProvider: imageProvider!,
+                      imageAspect: photo.aspectRatio,
+                      crop: crop,
+                    ),
+                    const Positioned(left: 10, top: 10, child: _CropBadge()),
+                    if (onAdjust != null)
+                      Positioned(
+                        right: 10,
+                        bottom: 10,
+                        child: FilledButton.tonalIcon(
+                          key: const Key('adjust-crop-overlay'),
+                          onPressed: onAdjust,
+                          style: FilledButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          icon: const Icon(Icons.crop_free_rounded, size: 16),
+                          label: const Text('Adjust'),
+                        ),
+                      ),
+                  ],
                 ),
               ),
+            ),
+    );
+  }
+}
+
+class _CropBadge extends StatelessWidget {
+  const _CropBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: const Text(
+        'CROP 4:3',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.7,
+        ),
+      ),
+    );
+  }
+}
+
+class _ContainedPreview extends StatelessWidget {
+  const _ContainedPreview({required this.imageProvider});
+
+  final ImageProvider imageProvider;
+
+  @override
+  Widget build(BuildContext context) {
+    return Image(
+      image: imageProvider,
+      fit: BoxFit.contain,
+      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+        if (wasSynchronouslyLoaded) return child;
+        return AnimatedOpacity(
+          opacity: frame == null ? 0 : 1,
+          duration: const Duration(milliseconds: 200),
+          child: child,
+        );
+      },
+      errorBuilder: (context, error, stackTrace) => Icon(
+        Icons.broken_image_outlined,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
       ),
     );
   }

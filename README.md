@@ -6,32 +6,10 @@ Browse the photos on your phone, pick one, and copy it onto a USB-connected
 Insta360 camera so the camera lists it like one of its own shots. Mobile port of
 [insta360-print-anything](https://github.com/kkazakov/insta360-print-anything).
 
-Android-first; iOS can be added later with `flutter create --platforms=ios .`.
-
-**Version 1.0.0** — working end to end and confirmed on a real GO Ultra.
+Android today; **iOS can be implemented on demand.**
 
 [Download the APK](https://github.com/kkazakov/insta360-print-anything-mobile/releases/latest) ·
 [Changelog](CHANGELOG.md) · [Release process](AGENTS.md#release-process)
-
-## Status
-
-Stage 2 is complete: the app rebuilds the selected photo as a camera original,
-writes it to `DCIM/Camera01`, and registers it in both camera indexes. The whole
-pipeline has been run on the real GO Ultra — the independent Python reference
-tool reports **8/8 camera fingerprints**, the new index record is first and its
-blob matches the trailer, the raw NV21 gallery buffer matches the embedded
-preview, and the author confirmed the camera lists and displays the copied photo.
-
-| Area | State |
-|---|---|
-| Photo gallery (all recent photos, newest first, paged) | done, on-device |
-| Runtime photo permission + re-ask / settings escape hatch | done, on-device |
-| Android 14+ "Select photos" partial access | done |
-| Responsive phone/tablet + portrait/landscape grid | done, on-device |
-| USB camera discovery + per-device USB permission | done, on-device |
-| Camera picker, storage grant, review screen | done |
-| Camera JPEG rebuild + `DCIM/fileinfo_list.list` update | done, verified on GO Ultra |
-| iOS | later |
 
 ## Download
 
@@ -48,6 +26,20 @@ The APK is signed for direct installation; the app is not on Google Play.
   drive once (named **disk** on the tested GO Ultra); the grant is remembered per
   camera.
 - `insta360-print-1.0.0.aab` is attached for Google Play/internal distribution.
+
+## Screenshots
+
+[![Recent photos, 4:3 crop editor and copy confirmation](docs/screenshots/overview.jpg)](docs/screenshots/overview.jpg)
+
+Recent photos, the 4:3 crop editor and the copy confirmation. More:
+[camera picker](docs/screenshots/02-camera-picker.png) ·
+[review with the default crop](docs/screenshots/03-review-crop.png) ·
+[crop editor](docs/screenshots/04-crop-editor.png) ·
+[panning the crop](docs/screenshots/05-crop-editor-panned.png) ·
+[adjusted review](docs/screenshots/06-review-adjusted.png) ·
+[copy success](docs/screenshots/07-copy-success.png).
+
+Screenshots use a curated sunset-only photo set.
 
 ## Requirements
 
@@ -72,7 +64,7 @@ The APK is signed for direct installation; the app is not on Google Play.
 ```bash
 flutter pub get
 flutter analyze
-flutter test                                   # 124 Dart unit + widget tests
+flutter test                                   # 135 Dart unit + widget tests
 flutter build apk --debug                      # JAVA_HOME=… as above
 flutter build apk --release                    # signed with android/key.properties
 flutter build appbundle --release              # Play AAB
@@ -109,7 +101,11 @@ adb -s 192.168.88.10:44045 install -r build/app/outputs/flutter-apk/app-debug.ap
 5. **Choosing a camera** opens the review screen. If this camera has no stored
    folder grant yet, the *Camera storage* card asks for the camera drive once
    (`ACTION_OPEN_DOCUMENT_TREE`); the grant is persisted per camera model.
-   *Crop* / *Fit* chooses how the photo is mapped onto the camera frame.
+   *Crop* / *Fit* chooses how the photo is mapped onto the camera frame. With
+   *Crop*, tap **Adjust** on the preview (or *Adjust crop* below the toggle) to
+   open the 4:3 editor: pinch to zoom, drag to move, then *Apply*. The crop is
+   sent to the native decoder, so the file the camera gets is exactly what the
+   4:3 frame showed.
 6. **Copy to camera** rebuilds the photo and writes it to the camera, with a
    progress line for reading, encoding, writing, indexing and verification.
 
@@ -317,31 +313,31 @@ cd android && JAVA_HOME=/usr/lib/jvm/java-21-openjdk \
   ./gradlew :app:testDebugUnitTest --tests 'com.wasp.insta360_print_anything_mobile.camera.*'
 ```
 
-- **124 Dart tests** in a full development checkout (26 of the sample-backed
-  tests skip cleanly when `.dev-samples/` is absent): gallery state machine, USB payload/classification, camera
-  picker, SAF repository rules, permission and review widgets, layout reflow,
-  the whole copy format core (69 tests, with byte-identical cross-checks
-  against the Python tool), and the copy engine end-to-end on real sample bytes
-  (build, verify, index prepend, rollback).
+- **135 Dart tests** in a full development checkout (26 of the sample-backed
+  tests skip cleanly when `.dev-samples/` is absent): gallery state machine, USB
+  payload/classification, camera picker, SAF repository rules, permission and
+  review widgets, layout reflow, crop-window geometry, the crop editor's
+  pan → copy wiring, the whole copy format core (69 tests, with byte-identical
+  cross-checks against the Python tool), and the copy engine end-to-end on real
+  sample bytes (build, verify, index prepend, rollback).
 - **10 Kotlin JVM tests**: encoder marker/DQT/DHT layout, ImageIO round-trips at
   odd sizes, determinism, NV21 video-range values and U/V order.
-- **2 on-device integration tests** (`integration_test/`): decode the newest
+- **3 on-device integration tests** (`integration_test/`): decode the newest
   real gallery photo (37.7 MP), encode 4096×3072 + 704×544 preview + 160×120
-  thumbnail with the camera DQT, and build the 574,464-byte NV21 buffer; also a
-  pad-fit encode at 1024×768. Ran green on the vivo V2515; the app's `run-as` is
-  broken on that ROM, so the outputs were not pulled, but the marker/DQT/size
-  assertions ran on the device.
+  thumbnail with the camera DQT, and build the 574,464-byte NV21 buffer; a
+  pad-fit encode at 1024×768; and a custom crop window through the native
+  decoder. Ran green on the vivo V2515; the app's `run-as` is broken on that
+  ROM, so the outputs were not pulled, but the marker/DQT/size assertions ran on
+  the device.
 
 ## Future work
 
-- Portrait/16:9 sources currently use the camera's smallest 4:3 mode and are
-  cropped (*Crop*) or letterboxed (*Fit*). Matching the source aspect to a 37 MP
-  16:9 template is the natural next step; available modes differ by camera body.
+- Portrait/16:9 sources currently use the camera's smallest 4:3 mode. The crop
+  editor makes the kept window explicit, but matching the source aspect to a
+  37 MP 16:9 camera mode is still future work; available modes differ by body.
 - Open the folder picker directly at the USB drive (`EXTRA_INITIAL_URI` is
   ignored by this device's DocumentsUI).
 - Remember the SAF grant per physical body rather than per VID:PID.
-- iOS transport (USB MTP/ImageCaptureCore or the Insta360 SDK). The domain and
-  copy-format layers are already platform-agnostic Dart.
 
 The reference material lives on the camera: three untouched GO Ultra JPEGs, the
 index files and the hidden metadata (copied locally to `.dev-samples/`, which is

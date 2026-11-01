@@ -32,6 +32,25 @@ object CameraImagePipeline {
 
     private const val TAG = "CameraImagePipeline"
 
+    /**
+     * Upper bound for the decoded source bitmap. A custom crop can be much
+     * smaller than the default centre crop, so decoding at the old cover size
+     * would throw away detail; this caps the ARGB working set at ~80 MB.
+     */
+    private const val MAX_DECODE_PIXELS = 20_000_000.0
+
+    private data class CropSpec(
+        val left: Double,
+        val top: Double,
+        val width: Double,
+        val height: Double,
+    ) {
+        fun isValid(): Boolean =
+            left.isFinite() && top.isFinite() && width.isFinite() && height.isFinite() &&
+                left >= 0.0 && top >= 0.0 && width > 0.0 && height > 0.0 &&
+                left + width <= 1.000001 && top + height <= 1.000001
+    }
+
     fun prepare(
         sourcePath: String,
         targetWidth: Int,
@@ -43,6 +62,10 @@ object CameraImagePipeline {
         lumaZigzag: IntArray,
         chromaZigzag: IntArray,
         fit: String,
+        cropLeft: Double? = null,
+        cropTop: Double? = null,
+        cropWidth: Double? = null,
+        cropHeight: Double? = null,
     ): PreparedCameraImages {
         require(targetWidth > 0 && targetHeight > 0) { "invalid target size" }
         require(previewWidth > 0 && previewHeight > 0) { "invalid preview size" }
@@ -52,9 +75,10 @@ object CameraImagePipeline {
         }
         val source = File(sourcePath)
         require(source.isFile) { "source image not found" }
+        val crop = parseCrop(cropLeft, cropTop, cropWidth, cropHeight)
 
         val started = System.currentTimeMillis()
-        val fitted = decodeAndFit(source, targetWidth, targetHeight, fit)
+        val fitted = decodeAndFit(source, targetWidth, targetHeight, fit, crop)
         try {
             val mainPixels = pixelsOf(fitted)
             val mainJpeg = CameraJpegEncoder.encode(
@@ -114,10 +138,12 @@ object CameraImagePipeline {
         tw: Int,
         th: Int,
         fit: String,
+        crop: CropSpec?,
     ): Bitmap {
         val imageSource = ImageDecoder.createSource(source)
         var decodedWidth = tw
         var decodedHeight = th
+        var effectiveCrop: CropSpec? = null
         val decoded = try {
             ImageDecoder.decodeBitmap(imageSource) { decoder, info, _ ->
                 val sw = info.size.width.toDouble()
@@ -134,10 +160,25 @@ object CameraImagePipeline {
                         decodedHeight = maxOf(1, kotlin.math.round(sh * scale).toInt())
                     }
                     else -> {
-                        // cover: decode larger in one dimension, then crop
-                        val scale = maxOf(tw / sw, th / sh)
-                        decodedWidth = maxOf(tw, kotlin.math.round(sw * scale).toInt())
-                        decodedHeight = maxOf(th, kotlin.math.round(sh * scale).toInt())
+                        // The selected crop must end up at least as large as the
+                        // target, but the decoded frame is capped so a huge source
+                        // cannot allocate an ARGB bitmap larger than ~80 MB.
+                        val selected = fitCropToTarget(
+                            crop ?: centeredCrop(sw, sh, tw, th),
+                            sw,
+                            sh,
+                            tw,
+                            th,
+                        )
+                        effectiveCrop = selected
+                        val cropW = selected.width * sw
+                        val cropH = selected.height * sh
+                        require(cropW >= 1.0 && cropH >= 1.0) { "crop window is empty" }
+                        val needed = maxOf(tw / cropW, th / cropH)
+                        val pixelCap = kotlin.math.sqrt(MAX_DECODE_PIXELS / (sw * sh))
+                        val scale = minOf(1.0, needed, pixelCap)
+                        decodedWidth = maxOf(1, kotlin.math.round(sw * scale).toInt())
+                        decodedHeight = maxOf(1, kotlin.math.round(sh * scale).toInt())
                     }
                 }
                 decoder.setTargetSize(decodedWidth, decodedHeight)
@@ -182,15 +223,19 @@ object CameraImagePipeline {
                 canvas.drawBitmap(argb, null, Rect(0, 0, tw, th), paint)
             }
             else -> {
-                // centre crop the decoded cover image into the target frame
-                val scale = maxOf(tw / dw, th / dh)
-                val cropW = (tw / scale).toInt().coerceIn(1, argb.width)
-                val cropH = (th / scale).toInt().coerceIn(1, argb.height)
-                val left = ((argb.width - cropW) / 2).coerceAtLeast(0)
-                val top = ((argb.height - cropH) / 2).coerceAtLeast(0)
+                val selected = effectiveCrop
+                    ?: throw IllegalStateException("crop window was not resolved")
+                val left = kotlin.math.round(selected.left * argb.width).toInt()
+                    .coerceIn(0, argb.width - 1)
+                val top = kotlin.math.round(selected.top * argb.height).toInt()
+                    .coerceIn(0, argb.height - 1)
+                val right = kotlin.math.round((selected.left + selected.width) * argb.width)
+                    .toInt().coerceIn(left + 1, argb.width)
+                val bottom = kotlin.math.round((selected.top + selected.height) * argb.height)
+                    .toInt().coerceIn(top + 1, argb.height)
                 canvas.drawBitmap(
                     argb,
-                    Rect(left, top, left + cropW, top + cropH),
+                    Rect(left, top, right, bottom),
                     Rect(0, 0, tw, th),
                     paint,
                 )
@@ -199,6 +244,79 @@ object CameraImagePipeline {
 
         argb.recycle()
         return output
+    }
+
+    private fun parseCrop(
+        left: Double?,
+        top: Double?,
+        width: Double?,
+        height: Double?,
+    ): CropSpec? {
+        val values = listOf(left, top, width, height)
+        if (values.all { it == null }) return null
+        require(values.all { it != null }) { "incomplete crop window" }
+        val crop = CropSpec(left!!, top!!, width!!, height!!)
+        require(crop.isValid()) { "invalid crop window" }
+        return crop
+    }
+
+    /** The largest target-aspect crop, centred (the old unconditional crop). */
+    private fun centeredCrop(sw: Double, sh: Double, tw: Int, th: Int): CropSpec {
+        val target = tw.toDouble() / th
+        val image = sw / sh
+        return if (image > target) {
+            val width = target / image
+            CropSpec((1 - width) / 2, 0.0, width, 1.0)
+        } else {
+            val height = image / target
+            CropSpec(0.0, (1 - height) / 2, 1.0, height)
+        }
+    }
+
+    /**
+     * Makes [crop]'s pixel aspect equal to the target frame, keeping its centre.
+     * The editor already hands us a matching rect; this protects the container
+     * if a caller (or a future target mode) is slightly off.
+     */
+    private fun fitCropToTarget(
+        crop: CropSpec,
+        sw: Double,
+        sh: Double,
+        tw: Int,
+        th: Int,
+    ): CropSpec {
+        val target = tw.toDouble() / th
+        var left = crop.left * sw
+        var top = crop.top * sh
+        var width = crop.width * sw
+        var height = crop.height * sh
+        require(width > 0.0 && height > 0.0) { "crop window is empty" }
+
+        val aspect = width / height
+        if (aspect > target) {
+            val newWidth = height * target
+            left += (width - newWidth) / 2
+            width = newWidth
+        } else if (aspect < target) {
+            val newHeight = width / target
+            top += (height - newHeight) / 2
+            height = newHeight
+        }
+
+        if (width > sw) {
+            width = sw
+            left = 0.0
+        }
+        if (height > sh) {
+            height = sh
+            top = 0.0
+        }
+        if (left < 0.0) left = 0.0
+        if (top < 0.0) top = 0.0
+        if (left + width > sw) left = sw - width
+        if (top + height > sh) top = sh - height
+
+        return CropSpec(left / sw, top / sh, width / sw, height / sh)
     }
 
     /** Scale-and-centre-crop [source] to exactly w x h, like fit_image(crop). */
